@@ -21,6 +21,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from PIL import Image as PILImage
 from IPython.display import Image as DispImage, display
+import base64
+import io
 
 """# **HÀM HỖ TRỢ**"""
 
@@ -101,54 +103,36 @@ display_full_screenshot(driver)
 
 """# **HÀM ĐĂNG NHẬP**"""
 
-BASE_PATH = '/content/drive/MyDrive/Colab Notebooks/CMT-Dragon'
-COOKIES_FILE = os.path.join(BASE_PATH, 'linkedin_cookies.pkl')
-CREDENTIALS_FILE = os.path.join(BASE_PATH, 'linkedin_credentials.pkl')
+def get_cookies_from_env():
+    """Lấy cookies đã được mã hóa từ biến môi trường và giải mã nó"""
+    encoded_cookies = os.getenv("LINKEDIN_COOKIES")
+    if not encoded_cookies:
+        print("ERROR: LINKEDIN_COOKIES environment variable not found!")
+        return None
+
+    try:
+        decoded_bytes = base64.b64decode(encoded_cookies)
+        cookies = pickle.loads(decoded_bytes)
+        print("INFO: Cookies loaded from environment variable!")
+        return cookies
+    except Exception as e:
+        print(f"ERROR: Failed to decode cookies: {e}")
+        return None
 
 def login_with_cookies(driver):
     """Đăng nhập sử dụng cookies nếu có"""
     driver.get("https://www.linkedin.com")
-
-    # Kiểm tra nếu cookies tồn tại
-    if os.path.exists(COOKIES_FILE):
-      print("COOKIES FILE FOUND! LOADING COOKIES...")
-      with open(COOKIES_FILE, "rb") as cookies_file:
-          cookies = pickle.load(cookies_file)
-
-      for cookie in cookies:
-          driver.add_cookie(cookie)
-
-      # Sau khi thêm cookies, làm mới trang để áp dụng
-      driver.refresh()
-      time.sleep(3)
-      return True  # Đăng nhập thành công bằng cookies
+    cookies = get_cookies_from_env()
+    if cookies:
+        for cookie in cookies:
+            if 'sameSite' in cookie:
+                del cookie['sameSite']  # Loại bỏ thuộc tính sameSite nếu có
+            driver.add_cookie(cookie)
+        driver.refresh()
+        time.sleep(3)
+        print("INFO: Logged in using cookies from environment variable!")
+        return True
     return False
-
-def save_cookies(driver):
-    """Lưu cookies vào file"""
-    with open(COOKIES_FILE, "wb") as cookies_file:
-        pickle.dump(driver.get_cookies(), cookies_file)
-    print("INFO: COOKIES SAVED!")
-
-def load_cookies(driver: webdriver.Chrome, file_name: str):
-    """Đọc cookies từ file pickle và thêm vào browser"""
-    if os.path.exists(file_name):
-        with open(file_name, 'rb') as f:
-            cookies = pickle.load(f)
-            for cookie in cookies:
-                driver.add_cookie(cookie)
-
-def load_credentials():
-    """Tải thông tin đăng nhập từ file"""
-    if os.path.exists(CREDENTIALS_FILE):
-        with open(CREDENTIALS_FILE, "rb") as f:
-            return pickle.load(f)
-    return None
-
-def save_credentials(username, password):
-    """Lưu thông tin đăng nhập vào file"""
-    with open(CREDENTIALS_FILE, "wb") as f:
-        pickle.dump({"username": username, "password": password}, f)
 
 def handle_cookie_acceptance(driver: webdriver.Chrome):
     """Xử lý chấp nhận cookies nếu có"""
@@ -161,100 +145,46 @@ def handle_cookie_acceptance(driver: webdriver.Chrome):
 def handle_code_verification(driver: webdriver.Chrome):
     """Xử lý yêu cầu nhập mã xác thực nếu có"""
     try:
-        # Tìm trường nhập mã xác thực
-        ID_FIELD = "input__email_verification_pin"
-        CONDITION = EC.presence_of_element_located((By.ID, ID_FIELD))
-        verification_field = WebDriverWait(driver, 20).until(CONDITION)
+            # Kiểm tra xem có trường nhập mã không
+        WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, "input__email_verification_pin")))
+        print("⚠️ CRITICAL: LINKEDIN REQUIRES VERIFICATION. AUTOMATIC LOGIN FAILED!")
 
-        # Tìm nút submit
-        ID_FIELD = "email-pin-submit-button"
-        CONDITION = EC.presence_of_element_located((By.ID, ID_FIELD))
-        submit_button = WebDriverWait(driver, 20).until(CONDITION)
-
-        # Nhập mã xác thực
-        code = input("Verification code required! Check your email and enter the code: ")
-        verification_field.send_keys(code)
-        time.sleep(1)
-        submit_button.click()
-        time.sleep(2)
+        return False 
     except:
         print("INFO: NO VERIFICATION DETECTED!")
+        return True
 
-def login(driver: webdriver.Chrome, username: str, password: str):
+def login(driver: webdriver.Chrome):
     """Đăng nhập vào LinkedIn với username và password mới nếu có sự thay đổi"""
-    XPATH_USERNAME = '//*[@id="username"]'
-    XPATH_PASSWORD = '//*[@id="password"]'
-    XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"]'
-
-    driver.get("https://www.linkedin.com/login")
+    driver.get("https://www.linkedin.com")
     time.sleep(2)  # Ensure the page is fully loaded
 
     # Cần xử lý chấp nhận ở đây
     handle_cookie_acceptance(driver)
 
-    # Kiểm tra nếu có cookies và kiểm tra xem username, password có thay đổi không
-    credentials = load_credentials()
-
-    if os.path.exists(COOKIES_FILE) and credentials:
-        # Kiểm tra nếu username hoặc password đã thay đổi
-        if credentials['username'] == username and credentials['password'] == password:
-            # Tải cookies và thử đăng nhập
-            load_cookies(driver, COOKIES_FILE)
-            driver.get("https://www.linkedin.com/feed")
-            time.sleep(3)
-
-            # Kiểm tra xem đã đăng nhập chưa bằng cách xem có biểu tượng người dùng không
-            try:
-                user_icon = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo')))
-                print("INFO: Logged in using cookies!")
-                # display_full_screenshot(driver)
-                return
-            except:
-                print("INFO: Cookies không hợp lệ, thử đăng nhập lại...")
-
-    # Nếu thông tin đăng nhập đã thay đổi hoặc không có cookies, đăng nhập thủ công
-    driver.get("https://www.linkedin.com/login")
-    username_field = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, XPATH_USERNAME)))
-    password_field = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, XPATH_PASSWORD)))
-    login_button = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, XPATH_LOGIN_BUTTON)))
-
-    username_field.send_keys(username)
-    time.sleep(2)
-    password_field.send_keys(password)
-    time.sleep(2)
-    login_button.click()
-
-    handle_code_verification(driver)
-
+    cookies = get_cookies_from_env()
+    if not cookies:
+        return False
+    for cookie in cookies:
+        if 'sameSite' in cookie:
+            del cookie['sameSite']  # Loại bỏ thuộc tính sameSite nếu có
+        driver.add_cookie(cookie)
+    driver.refresh()
     time.sleep(5)
-
-    # Lưu cookies và thông tin đăng nhập sau khi đăng nhập thành công
-    save_cookies(driver)
-    save_credentials(username, password)
-    print("INFO: Đăng nhập thành công và đã lưu cookies, thông tin đăng nhập!")
-    # display_screenshot(driver, "status.png")
-    # display_full_screenshot(driver)
-
-from google.colab import drive
-drive.mount('/content/drive')
+    print("INFO: Logged in using cookies from environment variable!")
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo'))
+        )
+        print("✅ SUCCESS: Đã vào được LinkedIn bằng Cookies!")
+        return True
+    except:
+        print("❌ CRITICAL: Cookie đã hết hạn hoặc bị LinkedIn từ chối.")
+        return False
 
 """# **THỰC HIỆN ĐĂNG NHẬP**"""
 
-username ="ray.lead@sam-foundation.org"
-password = "passnotE@1234"
-
-login(driver, username, password)
-
-# import os
-
-# COOKIES_FILE = 'linkedin_cookies.pkl'
-
-# if os.path.exists(COOKIES_FILE):
-#     os.remove(COOKIES_FILE)
-#     print(f"INFO: Removed {COOKIES_FILE}")
-# else:
-#     print(f"INFO: {COOKIES_FILE} not found. No cookies to remove.")
+login(driver)
 
 display_full_screenshot(driver)
 
