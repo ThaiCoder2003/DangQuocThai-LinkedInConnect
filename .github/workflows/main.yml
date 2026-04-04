@@ -1,0 +1,22 @@
+name: Debug LinkedIn Login
+on:
+  workflow_dispatch: # Chỉ chạy khi bạn bấm nút thủ công
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install selenium webdriver-manager
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Setup Tmate Session
+        uses: mxschmitt/action-tmate@v3
