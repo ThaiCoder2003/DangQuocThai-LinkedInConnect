@@ -66,21 +66,16 @@ def get_credentials_from_env():
         print(f"ERROR: Failed to decode cookies: {e}")
         return None
 
+def save_cookies(driver: webdriver.Chrome, file_name: str = "cookies.pkl"):
+    """Lưu cookies vào file"""
+    with open(file_name, "wb") as cookies_file:
+        pickle.dump(driver.get_cookies(), cookies_file)
+    print("INFO: COOKIES SAVED!")
 
-def login_with_cookies(driver):
-    """Đăng nhập sử dụng cookies nếu có"""
-    driver.get("https://www.linkedin.com")
-    cookies = get_cookies_from_env()
-    if cookies:
-        for cookie in cookies:
-            if 'sameSite' in cookie:
-                del cookie['sameSite']  # Loại bỏ thuộc tính sameSite nếu có
-            driver.add_cookie(cookie)
-        driver.refresh()
-        time.sleep(3)
-        print("INFO: Logged in using cookies from environment variable!")
-        return True
-    return False
+def save_credentials(username, password, file_name: str = "credentials.pkl"):
+    """Lưu thông tin đăng nhập vào file"""
+    with open(file_name, "wb") as f:
+        pickle.dump({"username": username, "password": password}, f)
 
 def handle_cookie_acceptance(driver: webdriver.Chrome):
     """Xử lý chấp nhận cookies nếu có"""
@@ -89,18 +84,6 @@ def handle_cookie_acceptance(driver: webdriver.Chrome):
         print("INFO: COOKIES IS ACCEPTED!")
     except:
         print("INFO: COOKIES IS NOT REQUIRED!")
-
-def handle_code_verification(driver: webdriver.Chrome):
-    """Xử lý yêu cầu nhập mã xác thực nếu có"""
-    try:
-            # Kiểm tra xem có trường nhập mã không
-        WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, "input__email_verification_pin")))
-        print("⚠️ CRITICAL: LINKEDIN REQUIRES VERIFICATION. AUTOMATIC LOGIN FAILED!")
-
-        return False 
-    except:
-        print("INFO: NO VERIFICATION DETECTED!")
-        return True
 
 def handle_code_verification(driver: webdriver.Chrome):
     """Xử lý yêu cầu nhập mã xác thực nếu có"""
@@ -140,7 +123,7 @@ def login(driver: webdriver.Chrome, username: str, password: str):
     credentials = get_credentials_from_env()
 
     cookies = get_cookies_from_env()
-    if cookies & credentials:
+    if cookies and credentials:
 
         for cookie in cookies:
             if 'sameSite' in cookie:
@@ -205,9 +188,8 @@ def login(driver: webdriver.Chrome, username: str, password: str):
         
         # --- LƯU FILE ĐỂ LẤY BASE64 TRÊN TMATE ---
         cookies_to_save = driver.get_cookies()
-        with open("cookies.pkl", "wb") as f:
-            pickle.dump(cookies_to_save, f)
-        print("💾 INFO: Đã lưu file cookies.pkl. Hãy chạy lệnh xuất Base64 ngay!")
+        save_cookies(driver)
+        save_credentials(username, password)
         driver.save_screenshot("logged_in.png")
         return True
     except:
@@ -390,9 +372,15 @@ def main():
     driver = webdriver.Chrome(service=service, options=options)
     
     try:
+        username = os.getenv("LINKEDIN_USER")
+        password = os.getenv("LINKEDIN_PASS")
+        
+        if not username or not password:
+            print("ERROR: LINKEDIN_USER OR LINKEDIN_PASS IS EMPTY!")
+            return
         # Lấy data
         df = get_local_data()
-        login_with_cookies(driver)
+        login(driver, username=username, password=password)
         # Đăng nhập và xử lý
     #     if df is not None:
     #         for index, row in df.iterrows():
