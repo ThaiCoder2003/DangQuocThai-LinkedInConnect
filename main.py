@@ -49,6 +49,23 @@ def get_cookies_from_env():
     except Exception as e:
         print(f"ERROR: Failed to decode cookies: {e}")
         return None
+    
+def get_credentials_from_env():
+    """Lấy credentials đã được mã hóa từ biến môi trường và giải mã nó"""
+    encoded_cookies = os.getenv("LINKEDIN_CREDENTIALS")
+    if not encoded_cookies:
+        print("ERROR: LINKEDIN_CREDENTIALS environment variable not found!")
+        return None
+
+    try:
+        decoded_bytes = base64.b64decode(encoded_cookies)
+        cookies = pickle.loads(decoded_bytes)
+        print("INFO: Credentials loaded from environment variable!")
+        return cookies
+    except Exception as e:
+        print(f"ERROR: Failed to decode cookies: {e}")
+        return None
+
 
 def login_with_cookies(driver):
     """Đăng nhập sử dụng cookies nếu có"""
@@ -85,33 +102,119 @@ def handle_code_verification(driver: webdriver.Chrome):
         print("INFO: NO VERIFICATION DETECTED!")
         return True
 
-def login(driver: webdriver.Chrome):
+def handle_code_verification(driver: webdriver.Chrome):
+    """Xử lý yêu cầu nhập mã xác thực nếu có"""
+    try:
+        # Tìm trường nhập mã xác thực
+        ID_FIELD = "input__email_verification_pin"
+        CONDITION = EC.presence_of_element_located((By.ID, ID_FIELD))
+        verification_field = WebDriverWait(driver, 20).until(CONDITION)
+
+        # Tìm nút submit
+        ID_FIELD = "email-pin-submit-button"
+        CONDITION = EC.element_to_be_clickable((By.ID, ID_FIELD))
+        submit_button = WebDriverWait(driver, 20).until(CONDITION)
+
+        # Nhập mã xác thực
+        code = input("Verification code required! Check your email and enter the code: ")
+        verification_field.send_keys(code)
+        time.sleep(1)
+        submit_button.click()
+        time.sleep(2)
+    except TimeoutException:
+        print("INFO: NO VERIFICATION DETECTED!")
+    except Exception as e:
+        print(f"ERROR: An error occurred during verification handling: {e}")
+
+def login(driver: webdriver.Chrome, username: str, password: str):
     """Đăng nhập vào LinkedIn với username và password mới nếu có sự thay đổi"""
+    XPATH_USERNAME = '//*[@id="username"]'
+    XPATH_PASSWORD = '//*[@id="password"]'
+    XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"]'
     driver.get("https://www.linkedin.com")
     time.sleep(2)  # Ensure the page is fully loaded
 
     # Cần xử lý chấp nhận ở đây
     handle_cookie_acceptance(driver)
+    
+    credentials = get_credentials_from_env()
 
     cookies = get_cookies_from_env()
-    if not cookies:
-        return False
-    for cookie in cookies:
-        if 'sameSite' in cookie:
-            del cookie['sameSite']  # Loại bỏ thuộc tính sameSite nếu có
-        driver.add_cookie(cookie)
-    driver.refresh()
-    time.sleep(5)
-    print("INFO: Logged in using cookies from environment variable!")
+    if cookies & credentials:
+
+        for cookie in cookies:
+            if 'sameSite' in cookie:
+                del cookie['sameSite']  # Loại bỏ thuộc tính sameSite nếu có
+            driver.add_cookie(cookie)
+        driver.refresh()
+        time.sleep(5)
+        print("INFO: Logged in using cookies from environment variable!")
+        try:
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo'))
+            )
+            print("✅ SUCCESS: Đã vào được LinkedIn bằng Cookies!")
+            return True
+        except:
+            print("❌ CRITICAL: Cookie đã hết hạn hoặc bị LinkedIn từ chối.")
+            print("Attempting to log in with credentials...")
+            # Nếu đăng nhập bằng cookies thất bại, thử đăng nhập bằng credentials
+    driver.get("https://www.linkedin.com/login")
+    try: 
+        username_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, XPATH_USERNAME)))
+        password_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, XPATH_PASSWORD)))
+        login_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON)))
+
+        username_field.send_keys(username)
+        time.sleep(2)
+        password_field.send_keys(password)
+        time.sleep(2)
+        login_button.click()
+
+        # Sau khi đăng nhập bằng credentials, kiểm tra xem có yêu cầu xác thực không
+        handle_code_verification(driver)
+        
+        time.sleep(5)
+
+        # Kiểm tra xem đã đăng nhập thành công chưa
+    except Exception as e:
+        try:
+            welcome_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.member-profile__details"))
+            )
+            print("INFO: ACCOUNT DETECTED. CLICKING WELCOME BUTTON TO BYPASS WELCOME BACK SCREEN.")
+            welcome_button.click()
+            time.sleep(2)
+
+            handle_code_verification(driver)
+
+            time.sleep(5)
+            save_cookies(driver)
+            save_credentials(username, password)
+
+            return True
+        except: # Now this is genuinely unable to login
+            print("ERROR: LOGIN FAILED")
+            return False
+        
     try:
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo'))
         )
-        print("✅ SUCCESS: Đã vào được LinkedIn bằng Cookies!")
+        print("✅ SUCCESS: ĐĂNG NHẬP THÀNH CÔNG!")
+        
+        # --- LƯU FILE ĐỂ LẤY BASE64 TRÊN TMATE ---
+        cookies_to_save = driver.get_cookies()
+        with open("cookies.pkl", "wb") as f:
+            pickle.dump(cookies_to_save, f)
+        print("💾 INFO: Đã lưu file cookies.pkl. Hãy chạy lệnh xuất Base64 ngay!")
+        driver.save_screenshot("logged_in.png")
         return True
     except:
-        print("❌ CRITICAL: Cookie đã hết hạn hoặc bị LinkedIn từ chối.")
+        print("❌ ERROR: FAILED TO LOGIN.")
+        driver.save_screenshot("login_error.png")
         return False
+    
 
 
 # XPATH ỨNG VỚI NÚT CONNECT.
@@ -291,45 +394,45 @@ def main():
         df = get_local_data()
         login_with_cookies(driver)
         # Đăng nhập và xử lý
-        if df is not None:
-            for index, row in df.iterrows():
-    # GO TO PROFILE LINK.
-                if row['Status'] == 'Unconnected':
-                    profile_link = row['LinkedIn']
-                    print(f"Visiting profile: {profile_link}", end=" ")
-                    driver.get(profile_link)
+    #     if df is not None:
+    #         for index, row in df.iterrows():
+    # # GO TO PROFILE LINK.
+    #             if row['Status'] == 'Unconnected':
+    #                 profile_link = row['LinkedIn']
+    #                 print(f"Visiting profile: {profile_link}", end=" ")
+    #                 driver.get(profile_link)
                     
-                    status = ""
-                    # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
-                    time.sleep(2)
+    #                 status = ""
+    #                 # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
+    #                 time.sleep(2)
 
-                    try:
-                # Wait until page loads
-                        time.sleep(random.uniform(3, 5))
-                        # Pretend to be reading profile
-                        print("Reading profile...", end=" ")
-                        time.sleep(random.uniform(5, 10))
-                        # Simulate slight scroll down
-                        driver.execute_script("window.scrollBy(0, 500);")
-                        time.sleep(random.uniform(2, 5))
-                        driver.execute_script("window.scrollTo(0, 0);")
-                        time.sleep(2)
-                        # CHECK CONNECTION AND SEND WITHOUT NOTE.
-                        status = check_connection(driver, row["Email"])  # Không gửi ghi chú
-                    except Exception as e:
-                        print(f"ERROR: {e}")
-                        status = "Error"
-                        df.at[index, 'Status'] = status
-                        print(f"Status: {status}")
-                        # UPDATE STATUS IN CSV FILE.
-                        df.to_csv('test_data.csv', index=False)
+    #                 try:
+    #             # Wait until page loads
+    #                     time.sleep(random.uniform(3, 5))
+    #                     # Pretend to be reading profile
+    #                     print("Reading profile...", end=" ")
+    #                     time.sleep(random.uniform(5, 10))
+    #                     # Simulate slight scroll down
+    #                     driver.execute_script("window.scrollBy(0, 500);")
+    #                     time.sleep(random.uniform(2, 5))
+    #                     driver.execute_script("window.scrollTo(0, 0);")
+    #                     time.sleep(2)
+    #                     # CHECK CONNECTION AND SEND WITHOUT NOTE.
+    #                     status = check_connection(driver, row["Email"])  # Không gửi ghi chú
+    #                 except Exception as e:
+    #                     print(f"ERROR: {e}")
+    #                     status = "Error"
+    #                     df.at[index, 'Status'] = status
+    #                     print(f"Status: {status}")
+    #                     # UPDATE STATUS IN CSV FILE.
+    #                     df.to_csv('test_data.csv', index=False)
                         
 
-                    # TAKE A BREAK BETWEEN EACH PERSON
-                        if index < len(df) - 1:
-                            print("Taking a break...", end=" ")
-                            driver.get("https://www.linkedin.com")
-                            time.sleep(random.randint(30, 60))
+    #                 # TAKE A BREAK BETWEEN EACH PERSON
+    #                     if index < len(df) - 1:
+    #                         print("Taking a break...", end=" ")
+    #                         driver.get("https://www.linkedin.com")
+    #                         time.sleep(random.randint(30, 60))
 
     finally:
         driver.quit()
