@@ -10,99 +10,30 @@ Original file is located at
 """
 import os
 import time
-import google_colab_selenium as gs
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from PIL import Image as PILImage
-from IPython.display import Image as DispImage, display
 import base64
-import io
-
-"""# **HÀM HỖ TRỢ**"""
-
-def display_full_screenshot(driver):
-    # Wait for the body element to be present
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-
-    # Lấy chiều cao của trang (toàn bộ nội dung)
-    total_height = driver.execute_script("return document.body.scrollHeight")
-
-    # Điều chỉnh chiều cao của cửa sổ trình duyệt để khớp với chiều cao của trang
-    driver.set_window_size(1920, total_height)  # Đặt chiều rộng và chiều cao mong muốn
-
-    # Chụp ảnh màn hình
-    driver.save_screenshot('screenshot.png')
-
-    # Hiển thị ảnh chụp màn hình
-    time.sleep(2)  # Đợi ảnh được lưu
-    display(DispImage('screenshot.png'))
-
-"""# **KẾT NỐI GOOGLE SHEETS**"""
-
 import pickle
 import pandas as pd
-import requests
-import pandas as pd
-from google.colab import auth
-from google.auth import default
-from googleapiclient.discovery import build
-
-# AUTHENTICATE.
-auth.authenticate_user()
-creds, _ = default()
-# CREATE THE SERVICE.
-service = build('sheets', 'v4', credentials=creds)
-# SPREEDSHEET GỐC.
-SPREADSHEET_ID = '1sgBi2o7wvi-fmMdu-CRqREyV1J3KKgKXkn9bbM9Qjno'
-# RANGE GỐC.
-RANGE_NAME = 'Sheet1!A:E'
-# CALL GOOGLE SHEETS API.
-sheet = service.spreadsheets()
-result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=RANGE_NAME).execute()
-values = result.get('values', [])
-# ENSURE ALL ROWS HAVE THE SAME NUMBER OF COLUMNS.
-max_cols = max(len(row) for row in values)
-values = [row + [''] * (max_cols - len(row)) for row in values]
-# CONVERT TO DATAFRAME.
-df = pd.DataFrame(values[1:], columns=values[0])
-# FILL ALL NAN WITH AN EMPTY STRING.
-df = df.fillna('')
-
-"""# **HIỂN THỊ KẾT QUẢ GOOGLE SHEETS**"""
-
-options = Options()
-
-options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
-options.add_argument("--window-size=1920,1080")
-options.add_argument('--headless')
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
-options.add_argument('--disable-gpu')
-
-driver = gs.Chrome(options=options)
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 
-# options.add_argument('--no-sandbox')
-# options.add_argument("--disable-dev-shm-usage")
-# options.add_argument('--headless')
-# options.add_argument('--disable-gpu')
-# options.add_argument("--window-size=1920, 1200")
-# options.add_argument('--disable-dev-shm-usage')
-
-# driver = webdriver.Chrome(options=options)
-
-#Test
-driver.get("https://www.linkedin.com")
-display_full_screenshot(driver)
-
-"""# **HÀM ĐĂNG NHẬP**"""
-
+def get_local_data():
+    file_path = 'data/test_sheet.csv' # Tên file bạn để trong Repo
+    if os.path.exists(file_path):
+        df = pd.read_csv(file_path)
+        # df = pd.read_excel('test_data.xlsx') # Nếu dùng Excel
+        print(f"📊 Đã nạp {len(df)} dòng từ file {file_path}")
+        return df
+    else:
+        print("❌ ERROR: Không tìm thấy file dữ liệu!")
+        return None
+    
 def get_cookies_from_env():
     """Lấy cookies đã được mã hóa từ biến môi trường và giải mã nó"""
     encoded_cookies = os.getenv("LINKEDIN_COOKIES")
@@ -182,13 +113,6 @@ def login(driver: webdriver.Chrome):
         print("❌ CRITICAL: Cookie đã hết hạn hoặc bị LinkedIn từ chối.")
         return False
 
-"""# **THỰC HIỆN ĐĂNG NHẬP**"""
-
-login(driver)
-
-display_full_screenshot(driver)
-
-"""# **XPATH VÀ CSS_SELECTOR**"""
 
 # XPATH ỨNG VỚI NÚT CONNECT.
 STATUS_CONNECT = "//main//section[1]//a[contains(., 'Connect') or contains(@aria-label, 'Invite')]"
@@ -298,8 +222,7 @@ def send_connection(driver: webdriver.Chrome, xpath: str, email: str):
             result = driver.execute_script(script, BUTTON_SEND_WITHOUT_NOTE)
             if result != "NOT_FOUND":
                 print("SUCCESS: SENT CONNECT WITHOUT NOTE!")
-                return "Connected"
-            return "Connected"
+                return "Pending"
         except TimeoutException:
             email_field = driver.find_elements(By.XPATH, TEXTFIELD_VERIFY_EMAIL)
             if email_field and email:
@@ -310,7 +233,7 @@ def send_connection(driver: webdriver.Chrome, xpath: str, email: str):
 
                 time.sleep(2)
 
-                return "Connected"
+                return "Pending"
             print("ERROR: NO SEND BUTTON FOUND!")
             return "Error"
     except Exception as e:
@@ -345,6 +268,7 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
             elif status_in_more == "Connected":
               return "Connected"
         except TimeoutException:
+            driver.save_screenshot("error_more_button.png")
             print("ERROR: BUTTON MORE NOT FOUND!")
             return "ERROR: BUTTON MORE NOT FOUND!"
 
@@ -352,53 +276,63 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
         print(f"ERROR: {e}")
         return "Error"
 
-"""# **THỰC HIỆN GỬI KẾT NỐI**"""
+def main():
+    options = Options()
+    options.add_argument('--headless=new')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
 
-for index, row in df.iterrows():
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    try:
+        # Lấy data
+        df = get_local_data()
+        login_with_cookies(driver)
+        # Đăng nhập và xử lý
+        if df is not None:
+            for index, row in df.iterrows():
     # GO TO PROFILE LINK.
-    if row['Status'] == 'Unconnected':
-        profile_link = row['LinkedIn']
-        email = row["Email"]
-        print(f"Visiting profile: {profile_link}", end=" ")
-        driver.get(profile_link)
-        #
-        display_full_screenshot(driver)
-        status = ""
-        # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
-        time.sleep(2)
+                if row['Status'] == 'Unconnected':
+                    profile_link = row['LinkedIn']
+                    print(f"Visiting profile: {profile_link}", end=" ")
+                    driver.get(profile_link)
+                    
+                    status = ""
+                    # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
+                    time.sleep(2)
 
-        try:
-          # Wait until page loads
-          time.sleep(random.uniform(3, 5))
-          # Pretend to be reading profile
-          print("Reading profile...", end=" ")
-          time.sleep(random.uniform(5, 10))
-          # Simulate slight scroll down
-          driver.execute_script("window.scrollBy(0, 500);")
-          time.sleep(random.uniform(2, 5))
-          driver.execute_script("window.scrollTo(0, 0);")
-          time.sleep(2)
-          # CHECK CONNECTION AND SEND WITHOUT NOTE.
-          status = check_connection(driver, row["Email"])  # Không gửi ghi chú
-        except Exception as e:
-          print(f"ERROR: {e}")
-          status = "Error"
-        df.at[index, 'Status'] = status
-        print(f"Status: {status}")
-        # SAVE STATUS ON GOOGLE SHEET OF 1 ROW
-        sheet.values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f"Sheet1!C{index + 2}",
-            valueInputOption="USER_ENTERED",
-            body={"values": [[status]]}
-        ).execute()
+                    try:
+                # Wait until page loads
+                        time.sleep(random.uniform(3, 5))
+                        # Pretend to be reading profile
+                        print("Reading profile...", end=" ")
+                        time.sleep(random.uniform(5, 10))
+                        # Simulate slight scroll down
+                        driver.execute_script("window.scrollBy(0, 500);")
+                        time.sleep(random.uniform(2, 5))
+                        driver.execute_script("window.scrollTo(0, 0);")
+                        time.sleep(2)
+                        # CHECK CONNECTION AND SEND WITHOUT NOTE.
+                        status = check_connection(driver, row["Email"])  # Không gửi ghi chú
+                    except Exception as e:
+                        print(f"ERROR: {e}")
+                        status = "Error"
+                        df.at[index, 'Status'] = status
+                        print(f"Status: {status}")
+                        # UPDATE STATUS IN CSV FILE.
+                        df.to_csv('test_data.csv', index=False)
+                        
 
-      # TAKE A BREAK BETWEEN EACH PERSON
-        if index < len(df) - 1:
-            print("Taking a break...", end=" ")
-            driver.get("https://www.linkedin.com")
-            time.sleep(random.randint(30, 60))
+                    # TAKE A BREAK BETWEEN EACH PERSON
+                        if index < len(df) - 1:
+                            print("Taking a break...", end=" ")
+                            driver.get("https://www.linkedin.com")
+                            time.sleep(random.randint(30, 60))
 
-"""# **KẾT THÚC CHƯƠNG TRÌNH**"""
-
-driver.quit()
+    finally:
+        driver.quit()
+        
+if __name__ == "__main__":
+    main()
