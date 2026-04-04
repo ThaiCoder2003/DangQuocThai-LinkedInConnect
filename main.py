@@ -372,8 +372,8 @@ def main():
     driver = webdriver.Chrome(service=service, options=options)
     
     try:
-        username = os.getenv("LINKEDIN_USER")
-        password = os.getenv("LINKEDIN_PASS")
+        username = os.getenv("LINKEDIN_USERNAME")
+        password = os.getenv("LINKEDIN_PASSWORD")
         
         if not username or not password:
             print("ERROR: LINKEDIN_USER OR LINKEDIN_PASS IS EMPTY!")

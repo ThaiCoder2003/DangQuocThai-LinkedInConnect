@@ -20,3 +20,7 @@ jobs:
 
       - name: Setup Tmate Session
         uses: mxschmitt/action-tmate@v3
+        env:
+          LINKEDIN_USER: ${{ secrets.LINKEDIN_USERNAME }}
+          LINKEDIN_PASS: ${{ secrets.LINKEDIN_PASSWORD }}
+          LINKEDIN_COOKIES: ${{ secrets.LINKEDIN_COOKIES }}
