@@ -17,8 +17,8 @@ jobs:
       - name: Run Script
         run: python3 main.py
         env:
-          LINKEDIN_USER: ${{ secrets.LINKEDIN_USERNAME }}
-          LINKEDIN_PASS: ${{ secrets.LINKEDIN_PASSWORD }}
+          LINKEDIN_USERNAME: ${{ secrets.LINKEDIN_USERNAME }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
           LINKEDIN_COOKIES: ${{ secrets.LINKEDIN_COOKIES }}
       - name: Commit and Push changes
         run: |
