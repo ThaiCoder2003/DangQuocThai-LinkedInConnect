@@ -2,6 +2,10 @@ name: LinkedIn Auto Run
 on:
   repository_dispatch:
     types: [trigger-linkedin]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-bot:

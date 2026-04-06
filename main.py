@@ -13,6 +13,7 @@ import time
 import base64
 import pickle
 import pandas as pd
+import random
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -267,8 +268,6 @@ def find_element_in_list(driver: webdriver.Chrome, e_list: list[str]):
         except:
           continue
     return None
-
-import random
 def send_connection(driver: webdriver.Chrome, xpath: str, email: str):
     try:
         # CLICK BUTTON CONNECT.
@@ -362,6 +361,9 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
         return "Error"
 
 def main():
+    # Take a random break at the start to avoid being detected as a bot if running on a schedule
+    time.sleep(random.randint(60, 600))
+    
     options = Options()
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
@@ -386,49 +388,49 @@ def main():
         count = 0 
         limit = 15 # LinkedIn có giới hạn gửi kết nối, thường là 15/ngày.
         
-    # # GO TO PROFILE LINK.
-    #     for index, row in df.iterrows():
-    #         # Dừng lại nếu đã đạt đến giới hạn gửi kết nối
-    #         if count >= limit:
-    #             print("Reached daily connection limit. Stopping.")
-    #             break
-    #         # Chỉ xử lý những người có trạng thái Unconnected
-    #         if row['Status'] == 'Unconnected':
-    #             profile_link = row['LinkedIn']
-    #             print(f"Visiting profile: {profile_link}", end=" ")
-    #             driver.get(profile_link)
+    # GO TO PROFILE LINK.
+        for index, row in df.iterrows():
+            # Dừng lại nếu đã đạt đến giới hạn gửi kết nối
+            if count >= limit:
+                print("Reached daily connection limit. Stopping.")
+                break
+            # Chỉ xử lý những người có trạng thái Unconnected
+            if row['Status'] == 'Unconnected':
+                profile_link = row['LinkedIn']
+                print(f"Visiting profile: {profile_link}", end=" ")
+                driver.get(profile_link)
                 
-    #             status = ""
-    # #                 # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
-    #             time.sleep(2)
+                status = ""
+    #                 # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
+                time.sleep(2)
 
-    #             try:
-    #             # Wait until page loads
-    #                 time.sleep(random.uniform(3, 5))
-    #             # Pretend to be reading profile
-    #                 print("Reading profile...", end=" ")
-    #                 time.sleep(random.uniform(5, 10))
-    #                 # Simulate slight scroll down
-    #                 driver.execute_script("window.scrollBy(0, 500);")
-    #                 time.sleep(random.uniform(2, 5))
-    #                 driver.execute_script("window.scrollTo(0, 0);")
-    #                 time.sleep(2)
-    #                 # CHECK CONNECTION AND SEND WITHOUT NOTE.
-    #                 status = check_connection(driver, row["Email"])  # Không gửi ghi chú
-    #             except Exception as e:
-    #                 print(f"ERROR: {e}")
-    #                 status = "Error"
-    #                 df.at[index, 'Status'] = status
-    #                 print(f"Status: {status}")
-    #                 # UPDATE STATUS IN CSV FILE.
-    #                 df.to_csv('test_sheet.csv', index=False)
+                try:
+                # Wait until page loads
+                    time.sleep(random.uniform(3, 5))
+                # Pretend to be reading profile
+                    print("Reading profile...", end=" ")
+                    time.sleep(random.uniform(5, 10))
+                    # Simulate slight scroll down
+                    driver.execute_script("window.scrollBy(0, 500);")
+                    time.sleep(random.uniform(2, 5))
+                    driver.execute_script("window.scrollTo(0, 0);")
+                    time.sleep(2)
+                    # CHECK CONNECTION AND SEND WITHOUT NOTE.
+                    status = check_connection(driver, row["Email"])  # Không gửi ghi chú
+                except Exception as e:
+                    print(f"ERROR: {e}")
+                    status = "Error"
+                    df.at[index, 'Status'] = status
+                    print(f"Status: {status}")
+                    # UPDATE STATUS IN CSV FILE.
+                    df.to_csv('test_sheet.csv', index=False)
                     
 
-    #             # TAKE A BREAK BETWEEN EACH PERSON
-    #                 if index < len(df) - 1:
-    #                     print("Taking a break...", end=" ")
-    #                     driver.get("https://www.linkedin.com")
-    #                     time.sleep(random.randint(30, 60))
+                # TAKE A BREAK BETWEEN EACH PERSON
+                    if index < len(df) - 1:
+                        print("Taking a break...", end=" ")
+                        driver.get("https://www.linkedin.com")
+                        time.sleep(random.randint(30, 60))
 
     finally:
         driver.quit()
