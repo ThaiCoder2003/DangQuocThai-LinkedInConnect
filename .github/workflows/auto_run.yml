@@ -29,3 +29,12 @@ jobs:
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Logs and Cookies
+        uses: actions/upload-artifact@v4
+        if: always() # Luôn chạy kể cả khi script bị lỗi
+        with:
+          name: bot-debug-data
+          path: |
+            *.png
+            *.pkl
+            data/test_sheet.csv

@@ -208,7 +208,7 @@ STATUS_CONNECT = "//main//section[1]//a[contains(., 'Connect') or contains(@aria
 STATUS_PENDING = "//main//section[1]//a[contains(., 'Pending')]"
 # XPATH ỨNG VỚI NÚT MORE.
 #BUTTON_MORE = "/html/body/div[5]/div[3]/div/div/div[2]/div/div/main/section[1]/div[2]/div[3]/div/div[2]/button"
-BUTTON_MORE = "//main//section[1]//button[contains(@aria-label, 'More') or contains(., 'More')]"
+BUTTON_MORE = "//main//section[1]//button[contains(@aria-label, 'More') or contains(@class, 'artdeco-dropdown__trigger')]"
 DROPDOWN_MENU = "//div[@role='menu']"
 # XPATH ỨNG VỚI NÚT CONNECT KHI NHẤN NÚT MORE.
 MORE_UNCONNECT = DROPDOWN_MENU + "//div[contains(@aria-label, 'Invite') and contains(@aria-label, 'to connect')]"
@@ -366,6 +366,7 @@ def main():
     
     options = Options()
     options.add_argument('--headless=new')
+    options.add_argument('--window-size=1920,1080')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
