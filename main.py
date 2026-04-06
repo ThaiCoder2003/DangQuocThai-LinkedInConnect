@@ -128,7 +128,6 @@ def login(driver: webdriver.Chrome, username: str, password: str):
             driver.add_cookie(cookie)
         driver.refresh()
         time.sleep(5)
-        print("INFO: Logged in using cookies from environment variable!")
         try:
             WebDriverWait(driver, 15).until(
                 EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo'))
