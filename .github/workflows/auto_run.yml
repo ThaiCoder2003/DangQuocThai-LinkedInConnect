@@ -1,0 +1,18 @@
+name: LinkedIn Auto Run
+on:
+  repository_dispatch:
+    types: [trigger-linkedin]
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: pip install selenium webdriver-manager pandas
+      - name: Run Script
+        run: python3 main.py
+        env:
+          LINKEDIN_USER: ${{ secrets.LINKEDIN_USERNAME }}
+          LINKEDIN_PASS: ${{ secrets.LINKEDIN_PASSWORD }}
+          LINKEDIN_COOKIES: ${{ secrets.LINKEDIN_COOKIES }}

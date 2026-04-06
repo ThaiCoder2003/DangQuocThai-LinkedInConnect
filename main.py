@@ -382,45 +382,44 @@ def main():
         df = get_local_data()
         login(driver, username=username, password=password)
         # Đăng nhập và xử lý
-    #     if df is not None:
-    #         for index, row in df.iterrows():
     # # GO TO PROFILE LINK.
-    #             if row['Status'] == 'Unconnected':
-    #                 profile_link = row['LinkedIn']
-    #                 print(f"Visiting profile: {profile_link}", end=" ")
-    #                 driver.get(profile_link)
-                    
-    #                 status = ""
+        for index, row in df.iterrows():
+            if row['Status'] == 'Unconnected':
+                profile_link = row['LinkedIn']
+                print(f"Visiting profile: {profile_link}", end=" ")
+                driver.get(profile_link)
+                
+                status = ""
     #                 # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
-    #                 time.sleep(2)
+                time.sleep(2)
 
-    #                 try:
-    #             # Wait until page loads
-    #                     time.sleep(random.uniform(3, 5))
-    #                     # Pretend to be reading profile
-    #                     print("Reading profile...", end=" ")
-    #                     time.sleep(random.uniform(5, 10))
-    #                     # Simulate slight scroll down
-    #                     driver.execute_script("window.scrollBy(0, 500);")
-    #                     time.sleep(random.uniform(2, 5))
-    #                     driver.execute_script("window.scrollTo(0, 0);")
-    #                     time.sleep(2)
-    #                     # CHECK CONNECTION AND SEND WITHOUT NOTE.
-    #                     status = check_connection(driver, row["Email"])  # Không gửi ghi chú
-    #                 except Exception as e:
-    #                     print(f"ERROR: {e}")
-    #                     status = "Error"
-    #                     df.at[index, 'Status'] = status
-    #                     print(f"Status: {status}")
-    #                     # UPDATE STATUS IN CSV FILE.
-    #                     df.to_csv('test_data.csv', index=False)
-                        
+                try:
+                # Wait until page loads
+                    time.sleep(random.uniform(3, 5))
+                # Pretend to be reading profile
+                    print("Reading profile...", end=" ")
+                    time.sleep(random.uniform(5, 10))
+                    # Simulate slight scroll down
+                    driver.execute_script("window.scrollBy(0, 500);")
+                    time.sleep(random.uniform(2, 5))
+                    driver.execute_script("window.scrollTo(0, 0);")
+                    time.sleep(2)
+                    # CHECK CONNECTION AND SEND WITHOUT NOTE.
+                    status = check_connection(driver, row["Email"])  # Không gửi ghi chú
+                except Exception as e:
+                    print(f"ERROR: {e}")
+                    status = "Error"
+                    df.at[index, 'Status'] = status
+                    print(f"Status: {status}")
+                    # UPDATE STATUS IN CSV FILE.
+                    df.to_csv('test_sheet.csv', index=False)
+                    
 
-    #                 # TAKE A BREAK BETWEEN EACH PERSON
-    #                     if index < len(df) - 1:
-    #                         print("Taking a break...", end=" ")
-    #                         driver.get("https://www.linkedin.com")
-    #                         time.sleep(random.randint(30, 60))
+                # TAKE A BREAK BETWEEN EACH PERSON
+                    if index < len(df) - 1:
+                        print("Taking a break...", end=" ")
+                        driver.get("https://www.linkedin.com")
+                        time.sleep(random.randint(30, 60))
 
     finally:
         driver.quit()
