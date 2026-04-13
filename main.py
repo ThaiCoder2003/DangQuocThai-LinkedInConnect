@@ -27,15 +27,14 @@ import undetected_chromedriver as uc
 def get_driver():
     options = uc.ChromeOptions()
     
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
-    ]
-    options.add_argument(f"user-agent={random.choice(user_agents)}") 
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/146 Safari/537.36"
+    )
+    options.add_argument("--headless=new")
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-gpu")
     
     driver = uc.Chrome(options=options)
     return driver
@@ -105,10 +104,6 @@ def save_cookies(driver: webdriver.Chrome, file_name: str = "cookies.pkl"):
         pickle.dump(driver.get_cookies(), cookies_file)
     print("INFO: COOKIES SAVED!")
 
-def save_credentials(username, password, file_name: str = "credentials.pkl"):
-    """Lưu thông tin đăng nhập vào file"""
-    with open(file_name, "wb") as f:
-        pickle.dump({"username": username, "password": password}, f)
 
 def handle_cookie_acceptance(driver: webdriver.Chrome):
     """Xử lý chấp nhận cookies nếu có"""
@@ -168,6 +163,7 @@ def handle_code_verification(driver: webdriver.Chrome):
         return True
     except Exception as e:
         print(f"[2FA] ⚠️ Error checking for 2FA: {e}")
+        driver.save_screenshot("error_login.png")
         return True
 
 
@@ -202,10 +198,16 @@ def load_session_with_cookies(driver: webdriver.Chrome) -> bool:
     return is_logged_in(driver)
 
 def login(driver: webdriver.Chrome, username: str, password: str):
+    driver.get("https://www.linkedin.com/feed")
+    time.sleep(3)
+
+    if is_logged_in(driver):
+        print("✅ Already logged in — skipping login")
+        return True
     """Đăng nhập vào LinkedIn and save session (first time only)"""
     XPATH_USERNAME = '//*[@id="username"]'
     XPATH_PASSWORD = '//*[@id="password"]'
-    XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"]'
+    XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large")]'
     
     print("🔐 Starting LinkedIn login process...")
     driver.get("https://www.linkedin.com/login")
@@ -240,21 +242,25 @@ def login(driver: webdriver.Chrome, username: str, password: str):
             human_type(password_field, password)
         time.sleep(random.uniform(1, 2))
         
-        login_button = WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON)))
-        
         print("🤔 Reviewing credentials...")
         time.sleep(random.uniform(2, 4))
 
         print("🚀 Clicking login button...")
-        for attempt in range(2):
+        for _ in range(2):
+            login_button = WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON)))
             login_button.click()
             time.sleep(5)
             handle_code_verification(driver)
             time.sleep(5)
+            current_url = driver.current_url
+
+            if "checkpoint" in current_url or "challenge" in current_url:
+                print("🚨 LinkedIn triggered verification checkpoint!")
+                return False
+            
             if is_logged_in(driver):
                 print("✅ SUCCESS: ĐĂNG NHẬP THÀNH CÔNG!")
                 save_cookies(driver)
-                save_credentials(username, password)
                  
                 print("🧍 Settling after login...")
                 time.sleep(random.uniform(10, 20))
@@ -277,22 +283,21 @@ def login(driver: webdriver.Chrome, username: str, password: str):
         return False
 
     
-# XPATH ỨNG VỚI NÚT CONNECT.
-STATUS_CONNECT = "//main//section[1]//a[contains(., 'Connect') or contains(@aria-label, 'Invite')]"
+# XPATH ỨNG VỚI NÚT CONNECT (English & Vietnamese)
+STATUS_CONNECT = "//main//section[1]//a[contains(@aria-label, 'Invite') or contains(@aria-label, 'Mời') or contains(., 'Connect') or contains(., 'kết nối')]"
 
-# XPATH ỨNG VỚI NÚT PENDING.
-#STATUS_MESSAGE = "/html/body/div[5]/div[3]/div/div/div[2]/div/div/main/section[1]/div[2]/div[3]/div/div[1]/button"
-STATUS_PENDING = "//main//section[1]//a[contains(., 'Pending')]"
+# XPATH ỨNG VỚI NÚT PENDING (English & Vietnamese)
+STATUS_PENDING = "//main//section[1]//a[contains(., 'Pending') or contains(., 'Đã gửi')]"
 # XPATH ỨNG VỚI NÚT MORE.
 #BUTTON_MORE = "/html/body/div[5]/div[3]/div/div/div[2]/div/div/main/section[1]/div[2]/div[3]/div/div[2]/button"
-BUTTON_MORE = "//main//section[1]//button[contains(@aria-label, 'More') or contains(@class, 'artdeco-dropdown__trigger')]"
+BUTTON_MORE = "//main//section[1]//button[contains(., 'More') or contains(., 'Khác')]"
 DROPDOWN_MENU = "//div[@role='menu']"
-# XPATH ỨNG VỚI NÚT CONNECT KHI NHẤN NÚT MORE.
-MORE_UNCONNECT = DROPDOWN_MENU + "//div[contains(@aria-label, 'Invite') and contains(@aria-label, 'to connect')]"
-# XPATH ỨNG VỚI NÚT UNCONNECT KHI NHẤN NÚT MORE.
-MORE_CONNECT = DROPDOWN_MENU + "//div[contains(@aria-label, 'Remove') and contains(@aria-label, 'connection')]"
-# XPATH ỨNG VỚI NÚT PENDING KHI NHẤN NÚT MORE.
-MORE_PENDING = DROPDOWN_MENU + "//div[contains(@aria-label, 'Withdraw')]"
+# XPATH ỨNG VỚI NÚT CONNECT KHI NHẤN NÚT MORE (English & Vietnamese)
+MORE_UNCONNECT = DROPDOWN_MENU + "//div[(contains(@aria-label, 'Invite') and contains(@aria-label, 'to connect')) or (contains(@aria-label, 'Mời') and contains(@aria-label, 'kết nối'))]"
+# XPATH ỨNG VỚI NÚT UNCONNECT KHI NHẤN NÚT MORE (English & Vietnamese)
+MORE_CONNECT = DROPDOWN_MENU + "//div[(contains(@aria-label, 'Remove') and contains(@aria-label, 'connection')) or contains(@aria-label, 'Xóa kết nối')]"
+# XPATH ỨNG VỚI NÚT PENDING KHI NHẤN NÚT MORE (English & Vietnamese)
+MORE_PENDING = DROPDOWN_MENU + "//div[contains(@aria-label, 'Withdraw') or contains(@aria-label, 'Hủy yêu cầu')]"
 # XPATH ỨNG VỚI NÚT ADD A NOTE.
 BUTTON_ADD_NOTE = "//button[contains(@aria-label, 'Add a note')]"
 # XPATH ỨNG VỚI KHUNG NHẬP NOTE.
@@ -326,14 +331,14 @@ def check_status(driver: webdriver.Chrome, xpath: str, *kws):
 
 
 def check_status_in_more(driver: webdriver.Chrome):
-    # CHECK UNCONNECTED STATUS IN MORE.
-    if check_status(driver, MORE_UNCONNECT, "Invite", "Connect"):
+    # CHECK UNCONNECTED STATUS IN MORE (English & Vietnamese).
+    if check_status(driver, MORE_UNCONNECT, "Invite", "Connect", "Mời", "kết nối"):
         return "Unconnected"
-    # CHECK CONNECTED STATUS IN MORE.
-    if check_status(driver, MORE_CONNECT, "Remove", "connection"):
+    # CHECK CONNECTED STATUS IN MORE (English & Vietnamese).
+    if check_status(driver, MORE_CONNECT, "Remove", "connection", "Xóa", "kết nối"):
         return "Connected"
-    # CHECK PENDING STATUS IN MORE.
-    if check_status(driver, "//div", "Withdraw", "Pending"):
+    # CHECK PENDING STATUS IN MORE (English & Vietnamese).
+    if check_status(driver, "//div", "Withdraw", "Pending", "Hủy", "Đã gửi"):
         return "Pending"
     return "Unknown"  # Giá trị trả về mặc định
 
@@ -403,14 +408,14 @@ def send_connection(driver: webdriver.Chrome, xpath: str, email: str):
 
 def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
     try:
-        # CHECK PENDING STATUS.
-        if check_status(driver, STATUS_PENDING, "Pending", "Sent"):
+        # CHECK PENDING STATUS (English & Vietnamese).
+        if check_status(driver, STATUS_PENDING, "Pending", "Đã gửi"):
             print("STATUS: PENDING")
             return "Pending"
 
-        # CHECK UNCONNECTED STATUS.
-        if check_status(driver, STATUS_CONNECT, "Invite", "Connect"):
-            status = send_connection(driver, STATUS_CONNECT, email)  # Gửi kết nối không có ghi chú
+        # CHECK UNCONNECTED STATUS (English & Vietnamese).
+        if check_status(driver, STATUS_CONNECT, "Invite", "Connect", "Mời", "kết nối"):
+            status = send_connection(driver, STATUS_CONNECT, email)
             print(f"STATUS: {status}")
             return status
 
