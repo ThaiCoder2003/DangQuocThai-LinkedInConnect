@@ -1,0 +1,40 @@
+name: LinkedIn Auto Connect
+
+on:
+  schedule:
+    # Run daily at 9 AM UTC (adjust to your timezone)
+    - cron: '0 9 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run LinkedIn Connect
+        env:
+          LINKEDIN_USERNAME: ${{ secrets.LINKEDIN_USERNAME }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+        run: python main.py
+      
+      - name: Upload screenshots on error
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: debug-screenshots
+          path: |
+            login_page.png
+            login_error*.png
+            logged_in.png

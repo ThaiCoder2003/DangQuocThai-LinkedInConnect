@@ -22,7 +22,39 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import undetected_chromedriver as uc
 
+def get_driver():
+    options = uc.ChromeOptions()
+    
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+    ]
+    options.add_argument(f"user-agent={random.choice(user_agents)}") 
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument("--window-size=1920,1080")
+    
+    driver = uc.Chrome(options=options)
+    return driver
+
+def is_logged_in(driver: webdriver.Chrome):
+    """Kiểm tra xem đã đăng nhập thành công chưa bằng cách tìm kiếm phần tử đặc trưng trên trang feed"""
+    try:
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo'))
+        )
+        return True
+    except TimeoutException:
+        return False
+    
+def human_type(element, text):
+    import random, time
+    for char in text:
+        element.send_keys(char)
+        time.sleep(random.uniform(0.05, 0.2))
 
 def get_local_data():
     file_path = 'data/test_sheet.csv' # Tên file bạn để trong Repo
@@ -81,133 +113,170 @@ def save_credentials(username, password, file_name: str = "credentials.pkl"):
 def handle_cookie_acceptance(driver: webdriver.Chrome):
     """Xử lý chấp nhận cookies nếu có"""
     try:
-        driver.find_element(By.XPATH, "//button[span[text()='Accept']]").click()
-        print("INFO: COOKIES IS ACCEPTED!")
+        # Tăng timeout và thử nhiều loại button text thường gặp
+        cookie_xpath = "//button[contains(., 'Accept') or contains(., 'Agree') or contains(., 'Cho phép')]"
+        accept_btn = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.XPATH, cookie_xpath))
+        )
+        accept_btn.click()
+        print("INFO: ✅ Cookie banner accepted")
     except:
-        print("INFO: COOKIES IS NOT REQUIRED!")
+        print("INFO: ℹ️ No cookie banner detected or already handled")
 
 def handle_code_verification(driver: webdriver.Chrome):
-    """Xử lý yêu cầu nhập mã xác thực nếu có"""
+    """Handle 2FA verification - can read from env var in automated mode"""
     try:
         # Tìm trường nhập mã xác thực
         ID_FIELD = "input__email_verification_pin"
-        CONDITION = EC.presence_of_element_located((By.ID, ID_FIELD))
-        verification_field = WebDriverWait(driver, 20).until(CONDITION)
-
+        print("[2FA] ⏳ Waiting up to 30s for 2FA field to appear...")
+        
+        try:
+            verification_field = WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.ID, ID_FIELD))
+            )
+        except TimeoutException:
+            print("[2FA] ℹ️ No 2FA required for this login.")
+            return True
         # Tìm nút submit
         ID_FIELD = "email-pin-submit-button"
         CONDITION = EC.element_to_be_clickable((By.ID, ID_FIELD))
-        submit_button = WebDriverWait(driver, 20).until(CONDITION)
+        submit_button = WebDriverWait(driver, 10).until(CONDITION)
 
-        # Nhập mã xác thực
-        code = input("Verification code required! Check your email and enter the code: ")
-        verification_field.send_keys(code)
-        time.sleep(1)
-        submit_button.click()
-        time.sleep(2)
+        # Try to get code from environment variable first (for automated runs)
+        code = os.getenv("LINKEDIN_2FA_CODE")
+        
+        if not code:
+            # If running interactively, ask user
+            import sys
+            if sys.stdin.isatty():
+                code = input("[2FA] Verification code required! Check your email and enter the code: ")
+            else:
+                print("[2FA] ⚠️ Code required but in automated mode and no LINKEDIN_2FA_CODE env var set")
+                print("[2FA] Skipping 2FA - may fail if actually required")
+                return False
+        
+        if code:
+            verification_field.send_keys(code)
+            time.sleep(1)
+            submit_button.click()
+            time.sleep(2)
+            print("[2FA] ✅ Code submitted")
+            return True
+            
     except TimeoutException:
-        print("INFO: NO VERIFICATION DETECTED!")
+        print("[2FA] ℹ️ No 2FA verification detected")
+        return True
     except Exception as e:
-        print(f"ERROR: An error occurred during verification handling: {e}")
+        print(f"[2FA] ⚠️ Error checking for 2FA: {e}")
+        return True
+
+
+def load_session_with_cookies(driver: webdriver.Chrome) -> bool:
+    cookies = get_cookies_from_env()
+    
+    if not cookies:
+        print("[SESSION] ❌ No stored cookies found in environment variables")
+        return False
+    
+    print("[SESSION] 🍪 Attempting stealth injection...")
+    
+    driver.get("https://www.linkedin.com/")
+    time.sleep(3)  # Wait for the page to load
+    valid_cookies = []
+    
+    for cookie in cookies:
+        cookie.pop('sameSite', None)
+        cookie.pop('expiry', None)  # sometimes breaks injection
+        try:
+            driver.add_cookie(cookie)
+            valid_cookies.append(cookie)
+        except Exception as e:
+            print(f"[SESSION] ⚠️ Failed to add cookie: {e}")
+            continue
+        
+    print(f"[SESSION] ✅ Injected {len(valid_cookies)}/{len(cookies)} cookies successfully")
+    driver.get("https://www.linkedin.com/feed/")
+    time.sleep(5)  # Wait for the feed to load
+    
+    # Check if login was successful by looking for profile avatar
+    return is_logged_in(driver)
 
 def login(driver: webdriver.Chrome, username: str, password: str):
-    """Đăng nhập vào LinkedIn với username và password mới nếu có sự thay đổi"""
+    """Đăng nhập vào LinkedIn and save session (first time only)"""
     XPATH_USERNAME = '//*[@id="username"]'
     XPATH_PASSWORD = '//*[@id="password"]'
     XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"]'
-    driver.get("https://www.linkedin.com")
-    time.sleep(2)  # Ensure the page is fully loaded
-
-    # Cần xử lý chấp nhận ở đây
-    handle_cookie_acceptance(driver)
-    cookies = get_cookies_from_env()
-    if cookies:
-
-        for cookie in cookies:
-            if 'sameSite' in cookie:
-                del cookie['sameSite']  # Loại bỏ thuộc tính sameSite nếu có
-            driver.add_cookie(cookie)
-        driver.refresh()
-        time.sleep(5)
-        
-        current_url = driver.current_url.lower()
     
-    # TRƯỜNG HỢP 1: Bị kẹt ở trang Join/Signup (Cái ảnh bạn vừa gửi)
-        if "signup" in current_url or "join" in current_url or "guest" in current_url:
-            print("WARNING: Stuck on signup/join page. Attempting to navigate to login page...")
-            driver.get("https://www.linkedin.com/login")
-            time.sleep(3)
-        try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo'))
-            )
-            print("✅ SUCCESS: Đã vào được LinkedIn bằng Cookies!")
-            return True
-        except:
-            print("❌ CRITICAL: Cookie đã hết hạn hoặc bị LinkedIn từ chối.")
-            print("Attempting to log in with credentials...")
-            # Nếu đăng nhập bằng cookies thất bại, thử đăng nhập bằng credentials
+    print("🔐 Starting LinkedIn login process...")
     driver.get("https://www.linkedin.com/login")
-    driver.save_screenshot("login_page.png")  # Chụp màn hình
+    time.sleep(3)
+    
+    handle_cookie_acceptance(driver)
+    
+    driver.save_screenshot("login_page.png")
+    
     try: 
-        username_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, XPATH_USERNAME)))
-        password_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, XPATH_PASSWORD)))
-        login_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON)))
-
-        username_field.send_keys(username)
-        time.sleep(2)
-        password_field.send_keys(password)
-        time.sleep(2)
-        login_button.click()
-
-        # Sau khi đăng nhập bằng credentials, kiểm tra xem có yêu cầu xác thực không
-        handle_code_verification(driver)
+        print("⏳ Waiting for login form...")
+        username_field = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, XPATH_USERNAME)))
+        username_field.click()
+        time.sleep(random.uniform(0.5, 1.5))
+        human_type(username_field, username)
+        if random.random() < 0.2:
+            print("⌨️ Oops, retyping username...")
+            username_field.clear()
+            time.sleep(random.uniform(1, 2))
+            human_type(username_field, username)
+        time.sleep(random.uniform(1, 2))
         
-        time.sleep(5)
         
-        save_cookies(driver)
-        save_credentials(username, password)
+        password_field = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, XPATH_PASSWORD)))
+        password_field.click()
+        time.sleep(random.uniform(0.5, 1.5))
+        human_type(password_field, password)
+        if random.random() < 0.2:
+            print("⌨️ Oops, retyping password...")
+            password_field.clear()
+            time.sleep(random.uniform(1, 2))
+            human_type(password_field, password)
+        time.sleep(random.uniform(1, 2))
+        
+        login_button = WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON)))
+        
+        print("🤔 Reviewing credentials...")
+        time.sleep(random.uniform(2, 4))
 
-        # Kiểm tra xem đã đăng nhập thành công chưa
-    except Exception as e:
-        try:
-            welcome_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.member-profile__details"))
-            )
-            print("INFO: ACCOUNT DETECTED. CLICKING WELCOME BUTTON TO BYPASS WELCOME BACK SCREEN.")
-            welcome_button.click()
-            time.sleep(2)
-
-            handle_code_verification(driver)
-
+        print("🚀 Clicking login button...")
+        for attempt in range(2):
+            login_button.click()
             time.sleep(5)
-            save_cookies(driver)
-            save_credentials(username, password)
+            handle_code_verification(driver)
+            time.sleep(5)
+            if is_logged_in(driver):
+                print("✅ SUCCESS: ĐĂNG NHẬP THÀNH CÔNG!")
+                save_cookies(driver)
+                save_credentials(username, password)
+                 
+                print("🧍 Settling after login...")
+                time.sleep(random.uniform(10, 20))
 
-            return True
-        except: # Now this is genuinely unable to login
-            print("ERROR: LOGIN FAILED")
-            return False
-        
-    try:
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CLASS_NAME, 'global-nav__me-photo'))
-        )
-        print("✅ SUCCESS: ĐĂNG NHẬP THÀNH CÔNG!")
-        
-        # --- LƯU FILE ĐỂ LẤY BASE64 TRÊN TMATE ---
-        cookies_to_save = driver.get_cookies()
-        save_cookies(driver)
-        save_credentials(username, password)
-        driver.save_screenshot("logged_in.png")
-        return True
-    except:
-        print("❌ ERROR: FAILED TO LOGIN.")
+                driver.execute_script("window.scrollBy(0, 300);")
+                time.sleep(random.uniform(3, 6))
+                driver.execute_script("window.scrollTo(0, 0);")
+                time.sleep(random.uniform(2, 5))
+                return True
+
+            print("[LOGIN] 🔄 Retry clicking login...")
+            time.sleep(random.uniform(2, 4))
+    except TimeoutException:
+        print("❌ ERROR: Login form not found or timeout. Page stuck on signup?")
+        driver.save_screenshot("login_error_timeout.png")
+        return False
+    except Exception as e:
+        print(f"❌ ERROR: Login failed: {e}")
         driver.save_screenshot("login_error.png")
         return False
+
     
-
-
 # XPATH ỨNG VỚI NÚT CONNECT.
 STATUS_CONNECT = "//main//section[1]//a[contains(., 'Connect') or contains(@aria-label, 'Invite')]"
 
@@ -370,29 +439,38 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
 
 def main():
     # Take a random break at the start to avoid being detected as a bot if running on a schedule
-    # time.sleep(random.randint(60, 600))
+    time.sleep(random.randint(2, 8))  # Short random delay between 2-8 seconds
     
-    options = Options()
-    options.add_argument('--headless=new')
-    options.add_argument('--window-size=1920,1080')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
-
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    driver = get_driver()
     
     try:
+        # Get data from CSV
+        df = get_local_data()
+        if df is None:
+            print("[CRON] ❌ ERROR: Could not load data file")
+            return False
+        
+        # Get credentials from environment variables
         username = os.getenv("LINKEDIN_USERNAME")
         password = os.getenv("LINKEDIN_PASSWORD")
         
         if not username or not password:
-            print("ERROR: LINKEDIN_USER OR LINKEDIN_PASS IS EMPTY!")
-            return
-        # Lấy data
-        df = get_local_data()
-        # Đăng nhập
-        login(driver, username=username, password=password)
+            print("[CRON] ❌ ERROR: LINKEDIN_USERNAME and LINKEDIN_PASSWORD environment variables are required!")
+            return False
+        
+        # Step 1: Try to use existing session with cookies (safest approach)
+        print("[CRON] 🔄 Attempting to restore session with cookies...")
+        if load_session_with_cookies(driver):
+            print("[CRON] ✅ Using cached session - no fresh login needed")
+        else:
+            # Step 2: If cookies failed, do a fresh login (will update cookies)
+            print("[CRON] 🔐 Cookies invalid/missing. Doing fresh login...")
+            if not login(driver, username, password):
+                print("[CRON] ❌ Failed to login. Exiting...")
+                return False
+            print("[CRON] ✅ Successfully logged in and cookies saved!")
+        
+        print("[CRON] ✅ Ready to send connections")
         
         count = 0 
         limit = 15 # LinkedIn có giới hạn gửi kết nối, thường là 15/ngày.
@@ -401,23 +479,21 @@ def main():
         for index, row in df.iterrows():
             # Dừng lại nếu đã đạt đến giới hạn gửi kết nối
             if count >= limit:
-                print("Reached daily connection limit. Stopping.")
+                print(f"[CRON] ⏹️ Reached daily connection limit ({limit}). Stopping.")
                 break
             # Chỉ xử lý những người có trạng thái Unconnected
             if row['Status'] == 'Unconnected':
                 profile_link = row['LinkedIn']
-                print(f"Visiting profile: {profile_link}", end=" ")
+                print(f"[CRON] 👤 Visiting profile: {profile_link}", end=" ")
                 driver.get(profile_link)
                 
                 status = ""
-    #                 # Đợi trang tải đầy đủ trước khi kiểm tra kết nối
-                time.sleep(2)
-
+                
                 try:
-                # Wait until page loads
+                    # Wait until page loads
                     time.sleep(random.uniform(3, 5))
-                # Pretend to be reading profile
-                    print("Reading profile...", end=" ")
+                    # Pretend to be reading profile
+                    print("Reading...", end=" ")
                     time.sleep(random.uniform(5, 10))
                     # Simulate slight scroll down
                     driver.execute_script("window.scrollBy(0, 500);")
@@ -425,24 +501,37 @@ def main():
                     driver.execute_script("window.scrollTo(0, 0);")
                     time.sleep(2)
                     # CHECK CONNECTION AND SEND WITHOUT NOTE.
-                    status = check_connection(driver, row["Email"])  # Không gửi ghi chú
+                    status = check_connection(driver, row["Email"])
+                    count += 1
+                    df.at[index, 'Status'] = status
+                    print(f"✅ Status: {status}")
+                    
                 except Exception as e:
-                    print(f"ERROR: {e}")
+                    print(f"❌ ERROR: {e}")
                     status = "Error"
                     df.at[index, 'Status'] = status
-                    print(f"Status: {status}")
-                    # UPDATE STATUS IN CSV FILE.
-                    df.to_csv('test_sheet.csv', index=False)
-                    
-
+                
+                # UPDATE STATUS IN CSV FILE
+                df.to_csv('data/test_sheet.csv', index=False)
+                
                 # TAKE A BREAK BETWEEN EACH PERSON
-                    if index < len(df) - 1:
-                        print("Taking a break...", end=" ")
-                        driver.get("https://www.linkedin.com")
-                        time.sleep(random.randint(30, 60))
-
+                if index < len(df) - 1:
+                    print("[CRON] ⏳ Taking a break...", end=" ")
+                    time.sleep(random.uniform(30, 60))
+                    print("Done")
+        
+        print(f"[CRON] ✅ COMPLETED: Sent {count} connection requests")
+        return True
+        
+    except Exception as e:
+        print(f"[CRON] ❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+        
     finally:
         driver.quit()
         
 if __name__ == "__main__":
-    main()
+    success = main()
+    exit(0 if success else 1)  # Exit with status code for cron-job.org
