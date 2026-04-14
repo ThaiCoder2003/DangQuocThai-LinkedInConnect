@@ -36,7 +36,7 @@ def get_driver():
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-gpu")
     
-    driver = uc.Chrome(options=options)
+    driver = uc.Chrome(options=options, version_main=146)
     return driver
 
 def is_logged_in(driver: webdriver.Chrome):
@@ -477,7 +477,7 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
 
 def main():
     # Take a random break at the start to avoid being detected as a bot if running on a schedule
-    time.sleep(random.randint(2, 8))  # Short random delay between 2-8 seconds
+    time.sleep(random.randint(60, 600))
     
     driver = get_driver()
     
