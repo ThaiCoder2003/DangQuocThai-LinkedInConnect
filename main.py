@@ -274,8 +274,41 @@ def login(driver: webdriver.Chrome, username: str, password: str):
             print("[LOGIN] 🔄 Retry clicking login...")
             time.sleep(random.uniform(2, 4))
     except TimeoutException:
-        print("❌ ERROR: Login form not found or timeout. Page stuck on signup?")
-        driver.save_screenshot("login_error_timeout.png")
+      # Use when the page says Welcome Back instead
+      try:
+        welcome_button = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.member-profile__details"))
+        )
+
+        print("[LOGIN] 🔄 Found an account!")
+        welcome_button.click()
+        time.sleep(2)
+
+        handle_code_verification(driver)
+
+        time.sleep(5)
+        if is_logged_in(driver):
+            print("✅ SUCCESS: ĐĂNG NHẬP THÀNH CÔNG!")
+            save_cookies(driver)
+                
+            print("🧍 Settling after login...")
+            time.sleep(random.uniform(10, 20))
+
+            driver.execute_script("window.scrollBy(0, 300);")
+            time.sleep(random.uniform(3, 6))
+            driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(random.uniform(2, 5))
+            return True
+
+        save_cookies(driver)
+
+        print("INFO: Login successful! Cookies and credentials saved!")
+        return True
+      except TimeoutException:
+          print(f"ERROR: LOGIN NOT SUCCESSFUL")
+          return False
+      except: # Now this is genuinely unable to login
+        print("ERROR: LOGIN FAILED")
         return False
     except Exception as e:
         print(f"❌ ERROR: Login failed: {e}")
