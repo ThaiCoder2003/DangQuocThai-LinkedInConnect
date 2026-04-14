@@ -477,7 +477,7 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
 
 def main():
     # Take a random break at the start to avoid being detected as a bot if running on a schedule
-    time.sleep(random.randint(60, 600))
+    time.sleep(random.randint(60, 1800))
     
     driver = get_driver()
     
