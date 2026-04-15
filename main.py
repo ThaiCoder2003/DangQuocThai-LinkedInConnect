@@ -81,22 +81,6 @@ def get_cookies_from_env():
     except Exception as e:
         print(f"ERROR: Failed to decode cookies: {e}")
         return None
-    
-def get_credentials_from_env():
-    """Lấy credentials đã được mã hóa từ biến môi trường và giải mã nó"""
-    encoded_cookies = os.getenv("LINKEDIN_CREDENTIALS")
-    if not encoded_cookies:
-        print("ERROR: LINKEDIN_CREDENTIALS environment variable not found!")
-        return None
-
-    try:
-        decoded_bytes = base64.b64decode(encoded_cookies)
-        cookies = pickle.loads(decoded_bytes)
-        print("INFO: Credentials loaded from environment variable!")
-        return cookies
-    except Exception as e:
-        print(f"ERROR: Failed to decode cookies: {e}")
-        return None
 
 def save_cookies(driver: webdriver.Chrome, file_name: str = "cookies.pkl"):
     """Lưu cookies vào file"""
