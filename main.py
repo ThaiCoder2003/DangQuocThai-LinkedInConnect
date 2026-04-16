@@ -369,60 +369,142 @@ def find_element_in_list(driver: webdriver.Chrome, e_list: list[str]):
     return None
 def send_connection(driver: webdriver.Chrome, xpath: str, email: str):
     try:
-        # CLICK BUTTON CONNECT.
+        # STEP 1 — Click Connect
         try:
-            e = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, xpath)))
-            e.click()
-        except TimeoutException:
-            print("ERROR: BUTTON CONNECT NOT FOUND")
-            return "Error"
-        except Exception as ex:
-            print(f"ERROR: FAILED TO CLICK CONNECT BUTTON: {ex}")
+            btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
+            )
+            btn.click()
+            print("[CONNECT] Clicked")
+        except:
+            print("❌ CONNECT button not found")
             return "Error"
 
-        # CLICK SEND WITHOUT NOTE.
-        try:
-            # IT'S WRAPPED IN #SHADOW-HOST (OPEN). WE MUST OPEN IT WITH CSS_SELECTOR INSTEAD
-            script = """
-                const selector = arguments[0]; // Nhận giá trị từ biến BUTTON_SELECTOR
-                    const allElements = document.querySelectorAll('*');
-                    for (let el of allElements) {
-                        if (el.shadowRoot) {
-                            const btn = el.shadowRoot.querySelector(selector);
-                            if (btn) {
-                                btn.click();
-                                return "CLICKED_SHADOW";
-                            }
-                        }
-                    }
-                    const normalBtn = document.querySelector(selector);
-                    if (normalBtn) {
-                        normalBtn.click();
-                        return "CLICKED_NORMAL";
-                    }
-                    return "NOT_FOUND";
-            """
-            result = driver.execute_script(script, BUTTON_SEND_WITHOUT_NOTE)
-            if result != "NOT_FOUND":
-                print("SUCCESS: SENT CONNECT WITHOUT NOTE!")
+        # STEP 2 — Wait for UI (modal or not)
+        if wait_for_modal(driver):
+            print("[CONNECT] Modal detected")
+        else:
+            print("[CONNECT] No modal (direct UI?)")
+
+        time.sleep(random.uniform(2, 4))
+
+        # STEP 3 — Try send buttons
+        selectors = [
+            "button[aria-label*='without a note']",
+            "button[aria-label*='Send now']",
+            "button[aria-label*='Gửi']"
+        ]
+
+        result = js_find_and_click(driver, selectors)
+
+        if result == "CLICKED":
+            print("[SEND] Button clicked")
+
+            if verify_sent(driver):
+                print("✅ VERIFIED: Sent")
                 return "Pending"
-        except TimeoutException:
-            email_field = driver.find_elements(By.XPATH, TEXTFIELD_VERIFY_EMAIL)
-            if email_field and email:
-                email_field[0].send_keys(email)
-                time.sleep(random.uniform(1, 2))
-                verify_btn = driver.find_element(By.XPATH, BUTTON_CONFIRM_EMAIL)
-                verify_btn.click()
 
-                time.sleep(2)
+        # STEP 4 — Email fallback
+        print("[FALLBACK] Trying email verification")
 
+        email_field = driver.find_elements(By.XPATH, TEXTFIELD_VERIFY_EMAIL)
+        if email_field and email:
+            email_field[0].send_keys(email)
+            time.sleep(1)
+
+            verify_btn = driver.find_element(By.XPATH, BUTTON_CONFIRM_EMAIL)
+            verify_btn.click()
+
+            if verify_sent(driver):
+                print("✅ VERIFIED via email")
                 return "Pending"
-            print("ERROR: NO SEND BUTTON FOUND!")
-            return "Error"
-    except Exception as e:
-        print(f"\n {e}")
+
+        print("❌ FAILED to send connection")
         return "Error"
 
+    except Exception as e:
+        print(f"❌ ERROR: {e}")
+        return "Error"
+
+def wait_for_modal(driver, timeout=5):
+    for _ in range(timeout * 2):  # check every 0.5s
+        result = driver.execute_script("""
+            const findDialog = () => {
+                const all = document.querySelectorAll('*');
+                for (let el of all) {
+                    if (el.shadowRoot) {
+                        const dialog = el.shadowRoot.querySelector("div[role='dialog']");
+                        if (dialog) return true;
+                    }
+                }
+                return document.querySelector("div[role='dialog']") !== null;
+            };
+            return findDialog();
+        """)
+        if result:
+            return True
+        time.sleep(0.5)
+    return False    
+
+def js_find_and_click(driver, selectors):
+    script = """
+    const selectors = arguments[0];
+
+    const findButton = () => {
+        // normal DOM
+        for (let sel of selectors) {
+            let btn = document.querySelector(sel);
+            if (btn) return btn;
+        }
+
+        // shadow DOM
+        const all = document.querySelectorAll('*');
+        for (let el of all) {
+            if (el.shadowRoot) {
+                for (let sel of selectors) {
+                    let btn = el.shadowRoot.querySelector(sel);
+                    if (btn) return btn;
+                }
+            }
+        }
+        return null;
+    };
+
+    const btn = findButton();
+    if (btn) {
+        btn.click();
+        return "CLICKED";
+    }
+    return "NOT_FOUND";
+    """
+    return driver.execute_script(script, selectors)
+
+def verify_sent(driver):
+    for _ in range(3):
+        time.sleep(2)
+        if check_status(driver, STATUS_PENDING, "Pending", "Đã gửi"):
+            return True
+    return False
+
+def wait_for_modal(driver, timeout=5):
+    for _ in range(timeout * 2):  # check every 0.5s
+        result = driver.execute_script("""
+            const findDialog = () => {
+                const all = document.querySelectorAll('*');
+                for (let el of all) {
+                    if (el.shadowRoot) {
+                        const dialog = el.shadowRoot.querySelector("div[role='dialog']");
+                        if (dialog) return true;
+                    }
+                }
+                return document.querySelector("div[role='dialog']") !== null;
+            };
+            return findDialog();
+        """)
+        if result:
+            return True
+        time.sleep(0.5)
+    return False
 def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
     try:
         # CHECK PENDING STATUS (English & Vietnamese).
