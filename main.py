@@ -533,9 +533,6 @@ def main():
                     status = "Error"
                     df.at[index, 'Status'] = status
                 
-                # UPDATE STATUS IN CSV FILE
-                df.to_csv('data/connect_sheet.csv', index=False)
-                
                 # TAKE A BREAK BETWEEN EACH PERSON
                 if index < len(df) - 1:
                     print("[CRON] ⏳ Taking a break...", end=" ")
@@ -543,6 +540,9 @@ def main():
                     print("Done")
         
         print(f"[CRON] ✅ COMPLETED: Sent {count} connection requests")
+        
+        # UPDATE STATUS IN CSV FILE
+        df.to_csv('data/connect_sheet.csv', index=False)
         return True
         
     except Exception as e:
