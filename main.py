@@ -56,7 +56,7 @@ def human_type(element, text):
         time.sleep(random.uniform(0.05, 0.2))
 
 def get_local_data():
-    file_path = 'data/test_sheet.csv' # Tên file bạn để trong Repo
+    file_path = 'data/connect_sheet.csv' # Tên file bạn để trong Repo
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
         # df = pd.read_excel('test_data.xlsx') # Nếu dùng Excel
@@ -534,7 +534,7 @@ def main():
                     df.at[index, 'Status'] = status
                 
                 # UPDATE STATUS IN CSV FILE
-                df.to_csv('data/test_sheet.csv', index=False)
+                df.to_csv('data/connect_sheet.csv', index=False)
                 
                 # TAKE A BREAK BETWEEN EACH PERSON
                 if index < len(df) - 1:

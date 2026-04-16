@@ -11,7 +11,7 @@ This script runs automatically on cron-job.org to send LinkedIn connection reque
 
 ## Prerequisites
 1. Repository must be **public** on GitHub (cron-job.org can only access public repos)
-2. `data/test_sheet.csv` with columns: `LinkedIn`, `Email`, `Status`
+2. `data/connect_sheet.csv` with columns: `LinkedIn`, `Email`, `Status`
 3. LinkedIn account credentials stored as environment variables
 
 ## Initial Setup (Manual - Do This Once)
@@ -29,7 +29,7 @@ python main.py
 This creates:
 - `cookies.pkl` - Session cookies
 - `credentials.pkl` - Encrypted credentials
-- `data/test_sheet.csv` - Updated with connection status
+- `data/connect_sheet.csv` - Updated with connection status
 
 ### Step 2: Encode Cookies for Environment Variable
 
@@ -45,7 +45,7 @@ Copy the long string output.
 
 Commit and push (base64 cookies in env var):
 ```bash
-git add cookies.pkl credentials.pkl data/test_sheet.csv
+git add cookies.pkl credentials.pkl data/connect_sheet.csv
 git commit -m "Initial cookies and data setup"
 git push
 ```
