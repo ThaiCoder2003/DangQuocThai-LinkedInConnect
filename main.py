@@ -486,25 +486,6 @@ def verify_sent(driver):
             return True
     return False
 
-def wait_for_modal(driver, timeout=5):
-    for _ in range(timeout * 2):  # check every 0.5s
-        result = driver.execute_script("""
-            const findDialog = () => {
-                const all = document.querySelectorAll('*');
-                for (let el of all) {
-                    if (el.shadowRoot) {
-                        const dialog = el.shadowRoot.querySelector("div[role='dialog']");
-                        if (dialog) return true;
-                    }
-                }
-                return document.querySelector("div[role='dialog']") !== null;
-            };
-            return findDialog();
-        """)
-        if result:
-            return True
-        time.sleep(0.5)
-    return False
 def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
     try:
         # CHECK PENDING STATUS (English & Vietnamese).
