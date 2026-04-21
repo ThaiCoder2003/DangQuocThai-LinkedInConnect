@@ -14,6 +14,8 @@ import base64
 import pickle
 import pandas as pd
 import random
+
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -23,6 +25,38 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import undetected_chromedriver as uc
+
+SHEET_URL = "https://script.google.com/macros/s/AKfycbyoD9Ias6atspuxgRxRCNnmXSSG1kPCJAdwjWBZ1xc1C6Ybg0dYDWYAv_-FoP1rghpe/exec"
+
+def get_sheet_data():
+    print("[SHEET] 📥 Fetching data from Google Sheets...")
+
+    res = requests.get(SHEET_URL)
+    data = res.json()
+
+    if not data or len(data) < 2:
+        print("[SHEET] ❌ No data found")
+        return None
+
+    headers = data[0]
+    rows = data[1:]
+
+    df = pd.DataFrame(rows, columns=headers)
+
+    print(f"[SHEET] ✅ Loaded {len(df)} rows from Google Sheets")
+    return df
+
+def update_sheet(df):
+    print("[SHEET] 📤 Updating Google Sheets...")
+
+    data = [df.columns.tolist()] + df.values.tolist()
+
+    res = requests.post(SHEET_URL, json=data)
+
+    if res.status_code == 200:
+        print("[SHEET] ✅ Sheet updated successfully")
+    else:
+        print(f"[SHEET] ❌ Failed to update: {res.status_code}")
 
 def get_driver():
     options = uc.ChromeOptions()
@@ -524,13 +558,13 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
 
 def main():
     # Take a random break at the start to avoid being detected as a bot if running on a schedule
-    time.sleep(random.randint(60, 1800))
+    # time.sleep(random.randint(60, 1800))
     
     driver = get_driver()
     
     try:
         # Get data from CSV
-        df = get_local_data()
+        df = get_sheet_data()
         if df is None:
             print("[CRON] ❌ ERROR: Could not load data file")
             return False
@@ -567,7 +601,9 @@ def main():
                 print(f"[CRON] ⏹️ Reached daily connection limit ({limit}). Stopping.")
                 break
             # Chỉ xử lý những người có trạng thái Unconnected
-            if row['Status'] == 'Unconnected':
+            status_value = str(row.get('Status', '')).strip().lower()
+
+            if status_value in ['', 'unconnected']:
                 profile_link = row['LinkedIn']
                 print(f"[CRON] 👤 Visiting profile: {profile_link}", end=" ")
                 driver.get(profile_link)
@@ -591,6 +627,8 @@ def main():
                     df.at[index, 'Status'] = status
                     print(f"✅ Status: {status}")
                     
+                    update_sheet(df)  # Cập nhật trạng thái ngay sau mỗi lần gửi để tránh mất dữ liệu nếu bị lỗi giữa chừng
+                    
                 except Exception as e:
                     print(f"❌ ERROR: {e}")
                     status = "Error"
@@ -604,10 +642,6 @@ def main():
         
         print(f"[CRON] ✅ COMPLETED: Sent {count} connection requests")
         
-        # UPDATE STATUS IN CSV FILE
-        df.to_csv('data/connect_sheet.csv', index=False)
-        return True
-        
     except Exception as e:
         print(f"[CRON] ❌ CRITICAL ERROR: {e}")
         import traceback
@@ -615,7 +649,10 @@ def main():
         return False
         
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
         
 if __name__ == "__main__":
     success = main()
